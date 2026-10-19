@@ -1,0 +1,64 @@
+name: Ticket Plus safe monitor
+on:
+  schedule:
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Safe probe first; monitor requires live-site verification and secrets'
+        type: choice
+        options: [probe, monitor]
+        default: probe
+permissions:
+  contents: write
+concurrency:
+  group: ticketplus-ticket-watch
+  cancel-in-progress: false
+jobs:
+  check:
+    if: github.event_name == 'workflow_dispatch' || vars.MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout isolated repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install Selenium
+        run: python -m pip install -r requirements.txt
+      - name: Read-only check
+        env:
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          SITE_VERIFIED: ${{ vars.SITE_VERIFIED }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REQUESTED_MODE: ${{ github.event.inputs.mode }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = 'schedule' ]; then
+            python -m src.ticket_watch --mode monitor
+          else
+            python -m src.ticket_watch --mode "${REQUESTED_MODE:-probe}"
+          fi
+      - name: Upload probe diagnostics (manual test only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'probe'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ticketplus-probe
+          path: diagnostics/
+          if-no-files-found: error
+          retention-days: 3
+      - name: Preserve deduplication state
+        if: success() && (github.event_name == 'schedule' || github.event.inputs.mode == 'monitor')
+        run: |
+          if [ -n "$(git status --porcelain -- state/state.json)" ]; then
+            git config user.name "ticketplus-monitor-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state/state.json
+            git commit -m "chore: update monitor state [skip ci]"
+            git push
+          fi
