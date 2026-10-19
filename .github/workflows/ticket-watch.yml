@@ -1,62 +1,49 @@
-name: Ticket Plus safe monitor
+name: Ticket Plus activity page watcher (not yet activated)
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Safe probe first; monitor requires live-site verification and secrets'
+        description: 'probe = inspect only; monitor requires verified public page and Telegram secrets'
         type: choice
         options: [probe, monitor]
         default: probe
 permissions:
   contents: write
 concurrency:
-  group: ticketplus-ticket-watch
+  group: ticketplus-activity-watch
   cancel-in-progress: false
 jobs:
   check:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - name: Checkout isolated repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
-      - name: Install Selenium
-        run: python -m pip install -r requirements.txt
-      - name: Read-only check
+      - run: python -m pip install -r requirements.txt
+      - name: Read public activity page only
         env:
+          PUBLIC_ACTIVITY_VERIFIED: ${{ vars.PUBLIC_ACTIVITY_VERIFIED }}
           MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
-          SITE_VERIFIED: ${{ vars.SITE_VERIFIED }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          REQUESTED_MODE: ${{ github.event.inputs.mode }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = 'schedule' ]; then
-            python -m src.ticket_watch --mode monitor
-          else
-            python -m src.ticket_watch --mode "${REQUESTED_MODE:-probe}"
-          fi
-      - name: Upload probe diagnostics (manual test only)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'probe'
+          MODE: ${{ github.event.inputs.mode }}
+        run: python -m src.public_activity --mode "$MODE"
+      - name: Save probe (no push messages)
+        if: github.event.inputs.mode == 'probe'
         uses: actions/upload-artifact@v4
         with:
-          name: ticketplus-probe
-          path: diagnostics/
-          if-no-files-found: error
+          name: public-activity-status
+          path: diagnostics/public-activity.json
           retention-days: 3
-      - name: Preserve deduplication state
-        if: success() && (github.event_name == 'schedule' || github.event.inputs.mode == 'monitor')
+      - name: Commit deduplication state (only after verified monitoring)
+        if: success() && github.event.inputs.mode == 'monitor'
         run: |
-          if [ -n "$(git status --porcelain -- state/state.json)" ]; then
+          if [ -n "$(git status --porcelain -- state/activity_state.json)" ]; then
             git config user.name "ticketplus-monitor-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add state/state.json
-            git commit -m "chore: update monitor state [skip ci]"
+            git add state/activity_state.json
+            git commit -m "chore: update activity alert state [skip ci]"
             git push
           fi
