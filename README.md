@@ -7,6 +7,16 @@
 ## 場次
 六個 2026 年日期：12/12、12/13、12/15、12/18、12/19、12/20，網址在 config/events.json。
 
+## 2026-10-19 實站測試結果（請先閱讀）
+
+GitHub Actions 已使用真實 Chrome 瀏覽器訪問六個 /order/ 連結（測試執行 https://github.com/qqqbis-droid/ticketplus-ticket-watch/actions/runs/39275634692）。
+**所有六場都跳轉到 /activity/af2bd66d8fe65d78963cbb5bdc85771c，並顯示手機號碼／密碼登入視窗；沒有看到個別場次的票種與庫存。**
+畫面上的「立即購買」是活動首頁按鈕，不能解讀為有票。程式已新增登入轉址識別（login_required）；即使出現一般活動購買按鈕，仍不得發送通知。
+
+**正式監測與 Telegram 仍然停用。** 此免費、未登入雲端方案目前無法可靠判斷何時釋票，不應依賴它搶票。
+請勿在公開 GitHub、Issues 或對話提供 Ticket Plus 的密碼／驗證碼／登入 Cookie。
+若將來 Ticket Plus 提供公開票況頁或官方通知／合法授權查詢方式，再重新驗證後啟用監測。
+
 ## 第一步：在 GitHub 執行安全觀察
 1. 打開本儲存庫 Actions → Ticket Plus safe monitor → Run workflow。
 2. 選擇 mode = probe，再執行。這不會推播、不會修改票況狀態。
