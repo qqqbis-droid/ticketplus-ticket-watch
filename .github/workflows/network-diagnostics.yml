@@ -1,0 +1,19 @@
+name: One-time public page network diagnostics
+on:
+  push:
+    paths:
+      - '.github/workflows/network-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Investigate only public network request metadata
+        run: python -m scripts.network_diagnostics
