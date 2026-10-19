@@ -46,6 +46,17 @@ GitHub Actions 已使用真實 Chrome 瀏覽器訪問六個 /order/ 連結（測
 
 **尚未啟用每五分鐘監控，也尚未設定 Telegram。** 目前 GitHub Actions 只提供手動 probe；請在 Actions 開啟「Ticket Plus activity page watcher (not yet activated)」→ Run workflow → mode = probe，結果產生 public-activity-status artifact。若網頁仍為 Loading… 或讀不到六場，絕不可開啟 MONITOR_ENABLED／PUBLIC_ACTIVITY_VERIFIED。
 
+## 2026-10-20 使用者活動首頁錄影與雲端驗證結論（最新）
+
+使用者提供的 iPhone Safari 錄影顯示，公開活動首頁「活動介紹」分頁內，有六張獨立的場次卡片（12/12、12/13、12/15、12/18、12/19、12/20），各卡底部目前均顯示灰色「銷售一空」。卡片不是 `<tr>` 表格列；程式已改用日期限定的卡片檢查，僅當同一場次卡內出現可見、可按的藍色「立即購買／立即購票」才有資格通知。使用者影片**沒有**拍到藍色可購買卡片，因此正向釋票條件尚未實站驗證。
+
+GitHub 雲端實際測試結果：
+- 一般 Chrome 讀取：10／32／55 秒均僅顯示 `Loading...` 與 2024 年占位日期，未回傳六場資料： https://github.com/qqqbis-droid/ticketplus-ticket-watch/actions/runs/39285450456
+- 模擬 iPhone 瀏覽器：等待逾 60 秒後仍是 `Loading...`、六場卡片 0 張；未取得票況： https://github.com/qqqbis-droid/ticketplus-ticket-watch/actions/runs/39301336620
+- Python 離線條件測試通過不代表 Ticket Plus 實站可監控。已移除臨時雲端測試工作流程。
+
+**結論：GitHub Actions 主機目前無法讀取這個活動的六場實際售票狀態。此儲存庫保留程式但沒有自動排程，Telegram 未設定、未發送任何通知。** 不應把它當成正在盯票的服務。後續若使用另外能讀取活動頁面的合規監控平台，須重新驗證各場次的已售完 → 可購買切換與推播可靠性，才可啟用。
+
 ## 第一步：在 GitHub 執行安全觀察
 1. 打開本儲存庫 Actions → Ticket Plus safe monitor → Run workflow。
 2. 選擇 mode = probe，再執行。這不會推播、不會修改票況狀態。
