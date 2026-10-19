@@ -1,7 +1,5 @@
 name: Ticket Plus safe monitor
 on:
-  schedule:
-    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -16,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   check:
-    if: github.event_name == 'workflow_dispatch' || vars.MONITOR_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
