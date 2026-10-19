@@ -21,6 +21,14 @@ class TicketWatchTests(unittest.TestCase):
         self.assertEqual(classify(s, RULE)[0], "unknown")
         s["ok"] = False
         self.assertEqual(classify(s, RULE)[0], "unknown")
+    def test_login_redirect_is_not_a_ticket(self):
+        s = {"ok": True, "url": "https://ticketplus.com.tw/order/event/session",
+             "landed_url": "https://ticketplus.com.tw/activity/event",
+             "body_text": "會員登入 密碼 立即購買",
+             "actions": [{"text": "立即購買", "enabled": True}],
+             "verified_matches": [{"visible": True, "enabled": True, "text": "立即購買", "context": "票價 NT$1000"}]}
+        self.assertEqual(classify(s, RULE)[0], "login_required")
+
     def test_sold_out_exact_only(self):
         self.assertEqual(classify({"ok": True, "body_text": "本場次已售完"}, None)[0], "sold_out")
         self.assertEqual(classify({"ok": True, "body_text": "一般票已售完，VIP仍有票"}, None)[0], "unknown")
