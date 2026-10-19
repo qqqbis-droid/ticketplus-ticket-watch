@@ -19,6 +19,14 @@ GitHub Actions 已使用真實 Chrome 瀏覽器訪問六個 /order/ 連結（測
 請勿在公開 GitHub、Issues 或對話提供 Ticket Plus 的密碼／驗證碼／登入 Cookie。
 若將來 Ticket Plus 提供公開票況頁或官方通知／合法授權查詢方式，再重新驗證後啟用監測。
 
+## 2026-10-20 iPhone 登入後畫面核對
+
+使用者提供的 Safari 螢幕錄影，實際進入 2026/12/12 田馥甄小巨蛋演唱會之 /order/ 分區選票頁。畫面中的各區逐列呈現 `剩餘 0`；展開 NT$800 的黃3G區則顯示 `已售完`。
+
+**監測規則已改進：** 只有同一個經獨立實站驗證的票區控制項可互動，且該票區文字顯示 `剩餘 N` 且 N > 0 時，才能判定 `available`。若只見「剩餘 > 0」而無法驗證可操作票區，僅判定候選，不發推播；當前可見票區全為 0 也不能推論整個活動所有票區售罄。
+
+**登入仍是阻礙：** 使用者 iPhone Safari 的登入狀態無法提供給 GitHub Actions；不得要求使用者提供密碼、驗證碼、session cookies 或登入 token。GitHub 雲端未經授權進入票種頁前，正式監測仍保持停用。
+
 ## 第一步：在 GitHub 執行安全觀察
 1. 打開本儲存庫 Actions → Ticket Plus safe monitor → Run workflow。
 2. 選擇 mode = probe，再執行。這不會推播、不會修改票況狀態。
