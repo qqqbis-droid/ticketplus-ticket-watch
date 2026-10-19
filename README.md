@@ -57,6 +57,16 @@ GitHub 雲端實際測試結果：
 
 **結論：GitHub Actions 主機目前無法讀取這個活動的六場實際售票狀態。此儲存庫保留程式但沒有自動排程，Telegram 未設定、未發送任何通知。** 不應把它當成正在盯票的服務。後續若使用另外能讀取活動頁面的合規監控平台，須重新驗證各場次的已售完 → 可購買切換與推播可靠性，才可啟用。
 
+## 2026-10-20 自建方案狀態：HTTP 403 已確認
+
+實際 GitHub 執行環境 Chrome Network log 證實活動頁透過公開 `apis.ticketplus.com.tw` 取得 `event.json`，但該請求失敗。後續不帶登入資訊、一般匿名 HTTP GET 測試回覆 403 Forbidden（有／無一般 Origin header 均相同）：https://github.com/qqqbis-droid/ticketplus-ticket-watch/actions/runs/39302958976
+
+所以現階段不應聲稱活動列表顯示「銷售一空／立即購買」的狀態可以被 GitHub 雲端驗證；不得啟用五分鐘監測，亦不應用其他方式繞過網站的拒絕存取。
+
+**已獨立建立可從 iPhone 操作的 Telegram 推播連線測試**：[手機安全設定教學](docs/telegram-iphone-setup.md)；[手動測試 Workflow](.github/workflows/telegram-test.yml)。測試通知明確標示「不是釋票通知」，而且不會打開定時監控。
+
+下一階段需要網站允許的公開資料來源或官方授權，並在雲端實際驗證六場資料可讀後，才啟用排程及真正的釋票通知。
+
 ## 第一步：在 GitHub 執行安全觀察
 1. 打開本儲存庫 Actions → Ticket Plus safe monitor → Run workflow。
 2. 選擇 mode = probe，再執行。這不會推播、不會修改票況狀態。
