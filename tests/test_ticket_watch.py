@@ -10,10 +10,10 @@ class TicketWatchTests(unittest.TestCase):
         s = {"ok": True, "body_text": "選擇場次", "actions": [{"text": "立即購票", "enabled": True}], "verified_matches": []}
         self.assertEqual(classify(s, None)[0], "candidate")
     def test_verified_button_works(self):
-        s = {"ok": True, "body_text": "選擇場次", "actions": [], "verified_matches": [{"visible": True, "enabled": True, "text": "立即購票", "context": "票種 NT$1800"}]}
+        s = {"ok": True, "body_text": "選擇場次", "actions": [], "verified_matches": [{"visible": True, "enabled": True, "text": "立即購票", "context": "票種 NT$1800 剩餘 2"}]}
         self.assertEqual(classify(s, RULE)[0], "available")
     def test_disabled_or_soldout_context_does_not_fire(self):
-        for text, enabled in [("票種 NT$1800", False), ("票種 NT$1800 已售完", True)]:
+        for text, enabled in [("票種 NT$1800 剩餘 2", False), ("票種 NT$1800 剩餘 0", True), ("票種 NT$1800 剩餘 0 已售完", True)]:
             s = {"ok": True, "body_text": "", "actions": [], "verified_matches": [{"visible": True, "enabled": enabled, "text": "立即購票", "context": text}]}
             self.assertNotEqual(classify(s, RULE)[0], "available")
     def test_captcha_and_errors_never_available(self):
@@ -29,6 +29,20 @@ class TicketWatchTests(unittest.TestCase):
              "verified_matches": [{"visible": True, "enabled": True, "text": "立即購買", "context": "票價 NT$1000"}]}
         self.assertEqual(classify(s, RULE)[0], "login_required")
 
+    def test_video_remaining_zero_never_alerts(self):
+        s = {"ok": True, "body_text": "特1區5200 剩餘 0 NT$5,200\\n黃3G區800 剩餘 0 已售完",
+             "actions": [], "verified_matches": [{"visible": True, "enabled": True,
+                 "text": "立即購票", "context": "黃3G區800 剩餘 0 票價 NT$800"}]}
+        self.assertEqual(classify(s, RULE)[0], "visible_zero")
+    def test_positive_remaining_without_verified_action_is_candidate(self):
+        s = {"ok": True, "body_text": "黃3G區800 剩餘 1 NT$800", "actions": [],
+             "verified_matches": []}
+        self.assertEqual(classify(s, RULE)[0], "candidate")
+    def test_unknown_count_cannot_trigger_available(self):
+        s = {"ok": True, "body_text": "購票", "actions": [],
+             "verified_matches": [{"visible": True, "enabled": True,
+                 "text": "立即購票", "context": "票種 NT$1800"}]}
+        self.assertNotEqual(classify(s, RULE)[0], "available")
     def test_sold_out_exact_only(self):
         self.assertEqual(classify({"ok": True, "body_text": "本場次已售完"}, None)[0], "sold_out")
         self.assertEqual(classify({"ok": True, "body_text": "一般票已售完，VIP仍有票"}, None)[0], "unknown")
