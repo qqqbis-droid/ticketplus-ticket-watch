@@ -27,6 +27,12 @@ GitHub Actions 已使用真實 Chrome 瀏覽器訪問六個 /order/ 連結（測
 
 **登入仍是阻礙：** 使用者 iPhone Safari 的登入狀態無法提供給 GitHub Actions；不得要求使用者提供密碼、驗證碼、session cookies 或登入 token。GitHub 雲端未經授權進入票種頁前，正式監測仍保持停用。
 
+## 2026-10-20 監測方案暫停與替代選項
+
+已移除 GitHub Actions 的五分鐘 `schedule`，只保留手動 `workflow_dispatch` 測試模式。原因：GitHub 執行器無法共用 iPhone Safari 上的 Ticket Plus 會員登入狀態，六場並未取得可驗證的即時票況。不能把無效的 Cron 當成有效監測。
+
+可嘗試第三方「票探 monitixx」(https://www.monitixx.com/) 的免費見習探員方案：網站宣稱支援 Ticket Plus、免費 1 個活動與 1 台裝置的重新開票推播。尚未獨立驗證田馥甄本次演出的六場是否全數已收錄或實際通知速度；請用 Safari 註冊並確認活動/場次可選，再加入主畫面及開啟 Web Push。第三方服務與 Ticket Plus 官方無關，無須提供 Ticket Plus 密碼。
+
 ## 第一步：在 GitHub 執行安全觀察
 1. 打開本儲存庫 Actions → Ticket Plus safe monitor → Run workflow。
 2. 選擇 mode = probe，再執行。這不會推播、不會修改票況狀態。
