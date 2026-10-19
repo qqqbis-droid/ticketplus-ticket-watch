@@ -23,6 +23,12 @@ END_EXCLUSIVE = datetime(2026, 12, 21, tzinfo=TZ)
 BUY_LABEL = re.compile(r"購買|選購|訂購|立即購票|選擇票價|選擇票種|加入購物車|buy|purchase", re.I)
 CAPTCHA = re.compile(r"驗證碼|人機驗證|captcha|are you human|access denied|存取遭拒|cloudflare.*challenge", re.I)
 SOLD_OUT = re.compile(r"(?:本場次|此場次|本活動|所有票券)(?:目前|已經)?(?:全部)?(?:已售完|售罄)|全數售完", re.I)
+REMAINING = re.compile(r"剩餘\s*([0-9][0-9,]*)")
+
+
+def ticket_counts(text: str) -> list[int]:
+    """Parse visible Ticket Plus per-section remaining ticket counts."""
+    return [int(n.replace(",", "")) for n in REMAINING.findall(text)]
 
 
 def load_json(path: Path, default):
@@ -53,10 +59,16 @@ def classify(snapshot: dict, rule: dict | None) -> tuple[str, str]:
                     continue
                 if re.search(r"已售完|售罄|額滿|暫停販售|不可購買", match.get("context", ""), re.I):
                     continue
-                if re.search(pattern, match.get("text", ""), re.I) and re.search(context, match.get("context", ""), re.I):
-                    return "available", "Verified enabled buy control inside ticket context"
+                counts = ticket_counts(match.get("context", ""))
+                if counts and any(n > 0 for n in counts) and re.search(pattern, match.get("text", ""), re.I) and re.search(context, match.get("context", ""), re.I):
+                    return "available", "Verified enabled purchase control in ticket row with positive remaining count"
     if SOLD_OUT.search(text):
         return "sold_out", "Explicit full-event sold-out text"
+    visible_counts = ticket_counts(text)
+    if visible_counts and any(n > 0 for n in visible_counts):
+        return "candidate", "Positive displayed remaining count, but no independently verified actionable ticket row"
+    if visible_counts and all(n == 0 for n in visible_counts):
+        return "visible_zero", "All currently visible ticket rows show remaining 0; page may be partial"
     if any(BUY_LABEL.search(str(x.get("text", ""))) for x in snapshot.get("actions", []) if x.get("enabled")):
         return "candidate", "Unverified CTA; cannot notify as buyable"
     return "unknown", "No verified actionable ticket control"
