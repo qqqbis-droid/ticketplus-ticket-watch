@@ -1,0 +1,19 @@
+name: Telegram iPhone test notification (manual only)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-telegram:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Send clearly marked test message (not a ticket alert)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m scripts.test_telegram
