@@ -43,6 +43,8 @@ def classify(snapshot: dict, rule: dict | None) -> tuple[str, str]:
         return "unknown", "Navigation/browser error"
     if CAPTCHA.search(text) or snapshot.get("blocked"):
         return "unknown", "Verification or blocked page"
+    if "/order/" in str(snapshot.get("url", "")) and snapshot.get("landed_url") and "/order/" not in str(snapshot.get("landed_url", "")):
+        return "login_required", "Direct order URL redirected away from ticket selection; login required"
     if rule:
         css, pattern, context = (rule.get(k) for k in ("button_css", "button_text_regex", "context_text_regex"))
         if css and pattern and context:
