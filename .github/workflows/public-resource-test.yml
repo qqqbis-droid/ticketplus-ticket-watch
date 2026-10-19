@@ -1,0 +1,16 @@
+name: One-time anonymous event resource test
+on:
+  push:
+    paths: ['.github/workflows/public-resource-test.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m scripts.public_resource_test
