@@ -2,11 +2,13 @@ name: One-time safe Ticket Plus browser probe
 on:
   issues:
     types: [opened]
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
   smoke:
-    if: github.event.issue.title == 'ticketplus-safe-probe-20261019'
+    if: (github.event_name == 'issues' && github.event.issue.title == 'ticketplus-safe-probe-20261019') || (github.event_name == 'push' && contains(github.event.head_commit.message, 'ticketplus-safe-smoke-trigger'))
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
