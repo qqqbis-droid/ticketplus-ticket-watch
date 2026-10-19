@@ -17,7 +17,7 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements.txt
       - name: Read public event page without login
-        run: python scripts/public_activity_probe.py
+        run: python -m scripts.public_activity_probe
       - uses: actions/upload-artifact@v4
         if: success()
         with:
