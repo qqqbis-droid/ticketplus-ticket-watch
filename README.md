@@ -33,6 +33,19 @@ GitHub Actions 已使用真實 Chrome 瀏覽器訪問六個 /order/ 連結（測
 
 可嘗試第三方「票探 monitixx」(https://www.monitixx.com/) 的免費見習探員方案：網站宣稱支援 Ticket Plus、免費 1 個活動與 1 台裝置的重新開票推播。尚未獨立驗證田馥甄本次演出的六場是否全數已收錄或實際通知速度；請用 Safari 註冊並確認活動/場次可選，再加入主畫面及開啟 Web Push。第三方服務與 Ticket Plus 官方無關，無須提供 Ticket Plus 密碼。
 
+## 2026-10-20 監控方式改為「活動首頁場次狀態」
+
+使用者指定公開活動首頁：https://ticketplus.com.tw/activity/af2bd66d8fe65d78963cbb5bdc85771c
+
+已新增 `src/public_activity.py`，其邏輯**不是**登入六個 /order/ 頁，也不是依據票區剩餘張數。它只會辨識活動首頁列表裡**符合六場 2026 年日期的那一列**：
+
+- 狀態欄為「已售完」「銷售一空」→ 當作沒有開賣。
+- 同一列的售票狀態變成可見、可操作的藍色「立即購買／立即購票」→ 可判定該場可能開放購票；才有資格推播。
+- 網站上方固定的「立即購買」、2024 年預設內容、Loading…、日期缺失／重複、登入／錯誤頁都不得當成有票。
+- 只有成功發出 Telegram 訊息後才記錄已通知；售完再重新開放會再次通知。所有判斷需要網站真實 DOM 驗證。
+
+**尚未啟用每五分鐘監控，也尚未設定 Telegram。** 目前 GitHub Actions 只提供手動 probe；請在 Actions 開啟「Ticket Plus activity page watcher (not yet activated)」→ Run workflow → mode = probe，結果產生 public-activity-status artifact。若網頁仍為 Loading… 或讀不到六場，絕不可開啟 MONITOR_ENABLED／PUBLIC_ACTIVITY_VERIFIED。
+
 ## 第一步：在 GitHub 執行安全觀察
 1. 打開本儲存庫 Actions → Ticket Plus safe monitor → Run workflow。
 2. 選擇 mode = probe，再執行。這不會推播、不會修改票況狀態。
