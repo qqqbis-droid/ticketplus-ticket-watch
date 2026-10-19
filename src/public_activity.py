@@ -81,6 +81,13 @@ return {rows,loading:/Loading\.{0,3}/.test(body),
 """
 
 def read(browser):
+    if os.environ.get("TICKETPLUS_MOBILE_EMULATION") == "1":
+        browser.set_window_size(390, 844)
+        browser.execute_cdp_cmd("Emulation.setDeviceMetricsOverride",
+                                {"width": 390, "height": 844, "deviceScaleFactor": 3, "mobile": True})
+        browser.execute_cdp_cmd("Emulation.setUserAgentOverride",
+                                {"userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+                                 "platform": "iPhone"})
     browser.get(URL)
     # Wait for actual rendered date-card content rather than fixed sleep.
     snap={}
