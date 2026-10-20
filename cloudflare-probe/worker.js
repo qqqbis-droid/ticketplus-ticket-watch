@@ -75,7 +75,7 @@ export default {
         const recognized=new Set(Object.values(SESSION_IDS));
         const products=pStatic.products.filter(x=>
           x && recognized.has(x.sessionId) && x.hidden!==true && typeof x.productId==="string");
-        const areas=pStatic.ticketAreas.filter(x=>
+        const areas=aStatic.ticketAreas.filter(x=>
           x && recognized.has(x.sessionId) && x.hidden!==true && typeof x.ticketAreaId==="string");
         const batches=(items,size=60)=>Array.from({length:Math.ceil(items.length/size)},(_,i)=>
           items.slice(i*size,(i+1)*size));
