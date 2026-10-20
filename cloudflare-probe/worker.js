@@ -69,7 +69,8 @@ export default {
         return reply({
           apiReadSuccess:false, observation:"UNKNOWN", failedStage:"official_status_read",
           errorCode:safeReason, errorType:e?.name||"Error",
-          note:"No schedule/Telegram alerts were run. Compare /all-status and review read-only API response."
+          upstreamDiagnostic:e?.safeDiagnostic||null,
+          note:"No schedule, KV writes or Telegram alerts were run. This reports only the official API error code and JSON field names."
         });
       }
     }
