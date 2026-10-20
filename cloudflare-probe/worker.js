@@ -47,8 +47,54 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/all-status") {
+      // The six public session URLs correspond to these non-secret backend IDs,
+      // independently verified against the 12/12 result; one read-only query.
+      const sessionMap = [
+        ["12/12（六）18:30", "s000002288"],
+        ["12/13（日）18:30", "s000002289"],
+        ["12/15（二）19:30", "s000002290"],
+        ["12/18（五）19:30", "s000002291"],
+        ["12/19（六）18:30", "s000002292"],
+        ["12/20（日）18:30", "s000002293"]
+      ];
+      const query = new URLSearchParams({
+        eventId:"e000001534", sessionId:sessionMap.map(x=>x[1]).join(",")
+      });
+      const url = "https://apis.ticketplus.com.tw/config/api/v1/get?" + query.toString();
+      try {
+        const response = await fetch(url,{method:"GET",redirect:"manual"});
+        const report={
+          source:"Ticket Plus official status API",
+          checkedAtTaipei:new Date().toLocaleString("sv-SE",{timeZone:"Asia/Taipei"}),
+          httpStatus:response.status,
+          success:response.ok,
+          expectedSessions:6
+        };
+        if (!response.ok) {
+          report.observation=response.status===403?"REQUEST_BLOCKED":"OTHER_RESPONSE";
+          return reply(report);
+        }
+        const json=await response.json();
+        const list=Array.isArray(json?.result?.session)?json.result.session:[];
+        const byId=new Map(list.filter(x=>x && typeof x.id==="string").map(x=>[x.id,x]));
+        report.apiErrorCode=json?.errCode??null;
+        report.returnedSessions=list.length;
+        report.sessions=sessionMap.map(([label,id])=>({
+          label, backendId:id,
+          status:typeof byId.get(id)?.status==="string" ? byId.get(id).status : "unknown",
+          matched:byId.has(id)
+        }));
+        report.allSixMatched=report.sessions.every(x=>x.matched);
+        report.note="Status is a sale-state signal, NOT verified live ticket inventory. No alerts or purchases.";
+        return reply(report);
+      } catch (error) {
+        return reply({source:"Ticket Plus official status API",observation:"REQUEST_FAILED",
+          errorType:error?.name || "UnknownError"});
+      }
     }
     if (path === "/status-probe") {
       // Read-only, one session. The IDs are public event/session identifiers
