@@ -95,3 +95,23 @@ test("all prerequisite flags alone do not bypass missing KV read",async()=>{
   assert.equal(result.stateStorageReadable,true);
   assert.equal(result.readyForSchedule,true);
 });
+
+test("HTTP 200 with a nonzero API error code safely exposes its shape",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  const failed=fakeReply(rows,"4010");
+  await assert.rejects(readOfficialStatus(failed),err=>{
+    assert.equal(err.message,"Official API returned application error");
+    assert.equal(err.safeDiagnostic.upstreamErrorCode,"4010");
+    assert.equal(err.safeDiagnostic.hasSessionArray,true);
+    assert.equal(err.safeDiagnostic.sessionCount,6);
+    return true;
+  });
+});
+test("an HTTP 200 API response without session list cannot produce an alert",async()=>{
+  const failed=async()=>({ok:true,status:200,headers:{get:()=> "application/json"},json:async()=>({errCode:"0",result:{event:{}}})});
+  await assert.rejects(readOfficialStatus(failed),err=>{
+    assert.equal(err.safeDiagnostic.upstreamErrorCode,"0");
+    assert.equal(err.safeDiagnostic.hasSessionArray,false);
+    return true;
+  });
+});
