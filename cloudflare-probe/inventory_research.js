@@ -275,13 +275,17 @@ export async function runZoneResearch(env,{now=new Date(),readSnapshot=readZoneS
     lastChangedAt:changed?at:previous.lastChangedAt,
     lastAlertAt:previous?.lastAlertAt||null,
     snapshot:current,signs,
-    pendingAlerts:previous?.pendingAlerts||[]
+    // An undelivered warning is obsolete once the signal vanishes; never
+    // send a stale "anomaly" alert after the area returns to soldout.
+    pendingAlerts:(previous?.pendingAlerts||[]).filter(a=>
+      signs[a.id]?.active && (!a.reason.includes("升級") || signs[a.id]?.strong))
   };
   // Protect against notification loss: retained pending alerts can retry after failure.
+  const pendingCleared=(previous?.pendingAlerts?.length||0)>state.pendingAlerts.length;
   if(alerts.length) {
     state.pendingAlerts=alerts;
     await env.TICKET_STATE.put(RESEARCH_STATE_KEY,JSON.stringify(state));
-  } else if(changed||heartbeat) {
+  } else if(changed||heartbeat||pendingCleared) {
     await env.TICKET_STATE.put(RESEARCH_STATE_KEY,JSON.stringify(state));
   }
   let delivered=false;
