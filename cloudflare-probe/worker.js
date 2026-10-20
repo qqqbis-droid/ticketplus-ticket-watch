@@ -1,3 +1,4 @@
+import {runScheduledMonitor, dryRunStatus} from "./monitor.js";
 // Ticket Plus read-only Cloudflare diagnostics. NO cron, login, purchases or retries.
 const EVENT = "af2bd66d8fe65d78963cbb5bdc85771c";
 const BASE = "https://apis.ticketplus.com.tw/config/api/v1/getS3?path=event/" + EVENT + "/";
@@ -42,13 +43,17 @@ function summarizeShape(value) {
     arrays, possibleFields};
 }
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const path = new URL(request.url).pathname;
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/monitor-preview") {
+      try { return reply(await dryRunStatus(env)); }
+      catch(e) {return reply({apiReadSuccess:false,observation:"UNKNOWN",errorType:e?.name||"Error",message:"Unable to validate official six-session statuses"});}
     }
     if (path === "/all-status") {
       // The six public session URLs correspond to these non-secret backend IDs,
@@ -209,5 +214,8 @@ export default {
     } catch (e) {
       return reply({observation:"REQUEST_FAILED", errorType:e?.name || "UnknownError"});
     }
+  },
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runScheduledMonitor(env));
   }
 };
