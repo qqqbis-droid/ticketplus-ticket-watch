@@ -1,5 +1,6 @@
 import {runScheduledMonitor, dryRunStatus} from "./monitor.js";
 import {verifyWebhookRequest,handleTelegramUpdate,registerButtonUI,getButtonUIStatus} from "./telegram_ui.js";
+import {shouldRunResearch,runZoneResearch,getResearchStatus} from "./inventory_research.js";
 // Cloudflare-only Ticket Plus official sale-state reader; no login or purchases.
 const EVENT = "af2bd66d8fe65d78963cbb5bdc85771c";
 const BASE = "https://apis.ticketplus.com.tw/config/api/v1/getS3?path=event/" + EVENT + "/";
@@ -66,8 +67,14 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample" && path !== "/inventory-all-summary" && path !== "/bot-ui-status")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample" && path !== "/inventory-all-summary" && path !== "/bot-ui-status" && path !== "/research-status" && path !== "/research-evidence")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/research-status" || path === "/research-evidence") {
+      try {return reply(await getResearchStatus(env,path === "/research-evidence"));}
+      catch(e){return reply({enabled:env?.RESEARCH_ENABLED==="true",
+        firstBaselineSaved:false,observation:"RESEARCH_STORAGE_UNAVAILABLE",
+        note:"Read-only status. No official API requests or Telegram alerts were triggered."});}
     }
     if (path === "/inventory-all-summary") {
       // Explicit one-off diagnostic endpoint; NOT used by the Cron scheduler.
@@ -485,11 +492,13 @@ export default {
     }
   },
   async scheduled(controller, env, ctx) {
-    // Button setup is independent from the existing six-session Cron monitor.
-    // Errors in Telegram webhook registration cannot suppress ticket monitoring.
-    ctx.waitUntil(Promise.allSettled([
-      runScheduledMonitor(env),
-      registerButtonUI(env)
-    ]));
+    // Preserve one-minute sale monitoring and one-tap Telegram setup.
+    // Deeper zone evidence collection is independently gated to every 5 min.
+    // A research API failure must never suppress the primary onsale alert.
+    const jobs=[runScheduledMonitor(env),registerButtonUI(env)];
+    if(shouldRunResearch(controller?.scheduledTime??Date.now())) {
+      jobs.push(runZoneResearch(env));
+    }
+    ctx.waitUntil(Promise.allSettled(jobs));
   }
 };
