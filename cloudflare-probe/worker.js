@@ -48,8 +48,84 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/inventory-sample") {
+      // Read-only feasibility probe. Two sample products and up to two matched
+      // ticket areas from each of six event sessions. No orders, KV, or Telegram.
+      const getJson=async url=>{
+        const response=await fetch(url,{method:"GET",redirect:"manual"});
+        if(!response.ok) throw new Error("SOURCE_HTTP_"+response.status);
+        const body=await response.json();
+        return body;
+      };
+      try {
+        const [staticProducts,staticAreas]=await Promise.all([
+          getJson(BASE+"products.json"),getJson(BASE+"ticketAreas.json")
+        ]);
+        if(!Array.isArray(staticProducts?.products) || !Array.isArray(staticAreas?.ticketAreas)) {
+          return reply({observation:"UNEXPECTED_STATIC_SCHEMA"});
+        }
+        const sessions=Object.entries(SESSION_IDS).map(([label,sessionId])=>{
+          const products=staticProducts.products.filter(p=>p?.sessionId===sessionId && p.hidden!==true);
+          const uniqueAreas=new Set();
+          const sample=[];
+          for(const p of products) {
+            if(typeof p.productId!=="string") continue;
+            const area=typeof p.ticketAreaId==="string"?p.ticketAreaId:null;
+            if(area && uniqueAreas.has(area)) continue;
+            sample.push(p);
+            if(area) uniqueAreas.add(area);
+            if(sample.length>=2) break;
+          }
+          return {label,sessionId,products:sample};
+        });
+        const ids=sessions.flatMap(s=>s.products.map(p=>p.productId));
+        const areaIds=[...new Set(sessions.flatMap(s=>s.products.map(p=>p.ticketAreaId).filter(Boolean)))];
+        if(ids.length!==12 || areaIds.length<6 || areaIds.length>12) {
+          return reply({observation:"UNEXPECTED_SAMPLE_COUNT",products:ids.length,areas:areaIds.length});
+        }
+        const dynBase="https://apis.ticketplus.com.tw/config/api/v1/get?";
+        const [liveProducts,liveAreas]=await Promise.all([
+          getJson(dynBase+new URLSearchParams({productId:ids.join(",")})),
+          getJson(dynBase+new URLSearchParams({ticketAreaId:areaIds.join(",")}))
+        ]);
+        const productItems=Array.isArray(liveProducts?.result?.product)?liveProducts.result.product:[];
+        const areaItems=Array.isArray(liveAreas?.result?.ticketArea)?liveAreas.result.ticketArea:[];
+        const products=new Map(productItems.map(x=>[x?.id,x]));
+        const areas=new Map(areaItems.map(x=>[x?.id,x]));
+        return reply({
+          source:"Ticket Plus dynamic product and ticketArea sample",
+          stockVerified:false,
+          productApiCode:liveProducts?.errCode??null,
+          areaApiCode:liveAreas?.errCode??null,
+          requestedProducts:ids.length, returnedProducts:productItems.length,
+          requestedAreas:areaIds.length, returnedAreas:areaItems.length,
+          sessions:sessions.map(x=>({
+            date:x.label,
+            samples:x.products.map(p=>{
+              const dp=products.get(p.productId)||{};
+              const da=areas.get(p.ticketAreaId)||{};
+              return {
+                productId:p.productId,
+                ticketAreaId:p.ticketAreaId||null,
+                productStatus:dp.status??null,
+                productCount:typeof dp.count==="number"?dp.count:null,
+                productLimit:typeof dp.productLimit==="boolean"?dp.productLimit:null,
+                areaStatus:da.status??null,
+                areaCount:typeof da.count==="number"?da.count:null,
+                areaLimit:typeof da.ticketAreaLimit==="boolean"?da.ticketAreaLimit:null
+              };
+            })
+          })),
+          note:"Sample-only data; cannot yet equate counts/states to gray temporary-unavailable or blue purchase button."
+        });
+      } catch(e) {
+        return reply({observation:"DYNAMIC_SAMPLE_FAILED",
+          errorType:e?.name||"Error",
+          reason:String(e?.message||"").startsWith("SOURCE_HTTP_")?String(e.message).slice(0,32):"UNEXPECTED_RESPONSE"});
+      }
     }
     if (path === "/stock-schema") {
       // Read-only feasibility probe for session vs. ticket area/product signals.
