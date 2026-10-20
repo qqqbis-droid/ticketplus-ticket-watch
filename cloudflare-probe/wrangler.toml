@@ -1,0 +1,6 @@
+name = "ticketplus-check"
+main = "worker.js"
+compatibility_date = "2026-10-20"
+workers_dev = true
+
+# No cron triggers, secrets, or paid bindings. Manual one-shot HTTP test only.
