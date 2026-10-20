@@ -280,14 +280,9 @@ export async function runZoneResearch(env,{now=new Date(),readSnapshot=readZoneS
     pendingAlerts:(previous?.pendingAlerts||[]).filter(a=>
       signs[a.id]?.active && (!a.reason.includes("升級") || signs[a.id]?.strong))
   };
-  // Protect against notification loss: retained pending alerts can retry after failure.
+  // Preserve undelivered warnings for a later retry; do not emit stale ones.
   const pendingCleared=(previous?.pendingAlerts?.length||0)>state.pendingAlerts.length;
-  if(alerts.length) {
-    state.pendingAlerts=alerts;
-    await env.TICKET_STATE.put(RESEARCH_STATE_KEY,JSON.stringify(state));
-  } else if(changed||heartbeat||pendingCleared) {
-    await env.TICKET_STATE.put(RESEARCH_STATE_KEY,JSON.stringify(state));
-  }
+  if(alerts.length) state.pendingAlerts=alerts;
   let delivered=false;
   if(state.pendingAlerts.length) {
     try {delivered=await notify(env,makeAlertMessage(state.pendingAlerts,at));}
@@ -295,8 +290,12 @@ export async function runZoneResearch(env,{now=new Date(),readSnapshot=readZoneS
     if(delivered) {
       state.pendingAlerts=[];
       state.lastAlertAt=at;
-      await env.TICKET_STATE.put(RESEARCH_STATE_KEY,JSON.stringify(state));
     }
+  }
+  // Cloudflare KV allows no more than one write per key per second.
+  // Evidence has already been saved above; commit final state only once.
+  if(changed||heartbeat||pendingCleared||alerts.length||delivered) {
+    await env.TICKET_STATE.put(RESEARCH_STATE_KEY,JSON.stringify(state));
   }
   console.log("Inventory research",{
     changedEntries:changedCount,alerts:alerts.length,delivered,
