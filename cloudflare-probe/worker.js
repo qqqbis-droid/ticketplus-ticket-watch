@@ -47,10 +47,10 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields")) {
       return new Response("Not found", {status:404});
     }
-    const filename = path === "/check" ? "event.json" : "sessions.json";
+    const filename = (path === "/check" || path === "/event-fields") ? "event.json" : "sessions.json";
     try {
       const res = await fetch(BASE + filename, {method:"GET",redirect:"manual"});
       const result = {
@@ -65,6 +65,37 @@ export default {
       try {
         const parsed = JSON.parse(data);
         result.jsonParsed = true;
+        if (path === "/event-fields") {
+          const fields = [];
+          let visited = 0;
+          const significant = /(?:status|sale|sold|stock|remain|ticket|buy|session|quota|limit|quantity|isopen|sell|open|stop|start|end|available|銷售|售票|票券|開賣)/i;
+          function walk(value, pathName, depth) {
+            if (++visited > 4000 || depth > 6 || fields.length >= 65 || value == null) return;
+            if (Array.isArray(value)) {
+              if (value.length) walk(value[0], pathName + "[0]", depth + 1);
+              return;
+            }
+            if (typeof value !== "object") return;
+            for (const [key,child] of Object.entries(value)) {
+              const nextPath = pathName + "." + key;
+              if (significant.test(key)) {
+                fields.push({
+                  path: nextPath, type:Array.isArray(child)?"array":typeof child,
+                  sample: typeof child === "number" || typeof child === "boolean"
+                    ? child : (typeof child === "string" ? child.slice(0,70) : undefined),
+                  count:Array.isArray(child)?child.length:undefined
+                });
+              }
+              if (child && typeof child === "object") walk(child,nextPath,depth+1);
+              if (fields.length >= 65 || visited > 4000) break;
+            }
+          }
+          walk(parsed,"$",0);
+          result.fieldCount = fields.length;
+          result.fields = fields;
+          result.note = "Event metadata is not live stock. Ticket-related fields need independent positive availability validation.";
+          return reply(result);
+        }
         if (path === "/sessions-summary") {
           const list = parsed && Array.isArray(parsed.sessions) ? parsed.sessions : [];
           result.sessionCount = list.length;
