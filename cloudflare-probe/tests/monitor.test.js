@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SESSIONS,decide,readOfficialStatus,makeTelegramText,dryRunStatus} from '../monitor.js';
+import {SESSIONS,decide,readOfficialStatus,makeTelegramText,dryRunStatus,shouldSaveHeartbeat} from '../monitor.js';
 
 const sold=()=>Object.fromEntries(SESSIONS.map(s=>[s.id,"soldout"]));
 function fakeReply(rows,errCode="00") {
@@ -142,4 +142,13 @@ test("preview reports previous successful scheduler checkpoint without writing K
   assert.equal(result.apiReadSuccess,true);
   assert.equal(result.lastSavedMonitorCheck,"2026-10-20T11:10:00.000Z");
   assert.equal(writes,0);
+});
+
+test("five-minute Cron heartbeat is persisted after four-minute safety margin",()=>{
+  const current=new Date("2026-10-20T11:40:00Z");
+  assert.equal(shouldSaveHeartbeat("2026-10-20T11:35:00Z",current),true);
+  assert.equal(shouldSaveHeartbeat("2026-10-20T11:36:01Z",current),false);
+  assert.equal(shouldSaveHeartbeat("2026-10-20T11:36:00Z",current),true);
+  assert.equal(shouldSaveHeartbeat("",current),true);
+  assert.equal(shouldSaveHeartbeat("bad-timestamp",current),true);
 });
