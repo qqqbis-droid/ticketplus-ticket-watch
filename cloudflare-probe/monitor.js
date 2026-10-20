@@ -20,7 +20,8 @@ const URL="https://apis.ticketplus.com.tw/config/api/v1/get?"
 export const STORE_KEY = "ticketplus:state:v1";
 
 export async function readOfficialStatus(fetchFn=fetch) {
-  const resp=await fetchFn(URL,{method:"GET",redirect:"manual",headers:{Accept:"application/json"}});
+  // Match the exact request options used by the independently successful /all-status probe.
+  const resp=await fetchFn(URL,{method:"GET",redirect:"manual"});
   if(!resp.ok || !String(resp.headers.get("content-type")||"").includes("application/json")) {
     throw new Error("Official API inaccessible or invalid response: "+resp.status);
   }
@@ -135,12 +136,23 @@ export async function runScheduledMonitor(env) {
   return {enabled:true,validRead:true,delivered:delivered.length};
 }
 
-export async function dryRunStatus(env) {
-  const current=await readOfficialStatus();
+export async function dryRunStatus(env, fetchFn=fetch) {
+  // Independently report source-reading and Cloudflare KV errors. One failure
+  // must not be mislabeled as a Ticket Plus API failure.
+  const current=await readOfficialStatus(fetchFn);
   let old={};
+  let storageReadable=false;
+  let storageError=null;
   if(env.TICKET_STATE) {
-    const stored=await env.TICKET_STATE.get(STORE_KEY,{type:"json"});
-    old=stored && stored.version===1 ? stored.sessions : {};
+    try {
+      const stored=await env.TICKET_STATE.get(STORE_KEY,{type:"json"});
+      old=stored && stored.version===1 && stored.sessions ? stored.sessions : {};
+      storageReadable=true;
+    } catch (e) {
+      storageError="KV_READ_FAILED";
+    }
+  } else {
+    storageError="KV_BINDING_MISSING";
   }
   const {pending}=decide(old,current);
   return {
@@ -148,8 +160,13 @@ export async function dryRunStatus(env) {
     liveInventoryVerified:false,
     apiReadSuccess:true,
     stateStorageConfigured:!!env.TICKET_STATE,
+    stateStorageReadable:storageReadable,
+    storageError,
     telegramConfigured:Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
     enabled:env.MONITOR_ENABLED==="true",
+    readyForSchedule:storageReadable &&
+      Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) &&
+      env.MONITOR_ENABLED==="true",
     sessions:SESSIONS.map(s=>({
       date:s.date,time:s.time,status:current[s.id],
       wouldNotifyOnNextRun:pending.some(x=>x.session.id===s.id)
