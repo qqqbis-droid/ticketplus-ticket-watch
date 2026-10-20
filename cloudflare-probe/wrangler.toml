@@ -13,6 +13,7 @@ MONITOR_ENABLED = "true"
 [[kv_namespaces]]
 binding = "TICKET_STATE"
 
-# Every five minutes, entirely within Cloudflare (not GitHub Actions).
+# Every minute, entirely within Cloudflare (not GitHub Actions).
+# KV heartbeat stays on its four-minute safety margin to respect Free limits.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]
