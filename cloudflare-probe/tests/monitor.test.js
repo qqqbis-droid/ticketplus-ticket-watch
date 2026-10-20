@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SESSIONS,decide,readOfficialStatus,makeTelegramText,dryRunStatus} from '../monitor.js';
+import {SESSIONS,decide,readOfficialStatus,makeTelegramText,dryRunStatus,runOneTimeTelegramTest} from '../monitor.js';
 
 const sold=()=>Object.fromEntries(SESSIONS.map(s=>[s.id,"soldout"]));
 function fakeReply(rows,errCode="00") {
@@ -129,4 +129,34 @@ test("other codes cannot be mistaken for success",async()=>{
   for(const code of ["01","000","4010",null]){
     await assert.rejects(readOfficialStatus(fakeReply(rows,code)),/application error/);
   }
+});
+
+test("temporary Telegram smoke test calls sender only once and never exposes secrets",async()=>{
+  const state=new Map();
+  const env={
+    TELEGRAM_BOT_TOKEN:"FAKE_PRIVATE_TEST_TOKEN",
+    TELEGRAM_CHAT_ID:"FAKE_PRIVATE_TEST_CHAT",
+    TICKET_STATE:{
+      get:async key=>state.get(key)||null,
+      put:async(key,value)=>state.set(key,value)
+    }
+  };
+  let sends=0;
+  const sender=async(_env,message)=>{
+    sends++;
+    assert.match(message,/Cloudflare Worker/);
+    assert.doesNotMatch(message,/FAKE_PRIVATE_TEST_TOKEN/);
+    return true;
+  };
+  const first=await runOneTimeTelegramTest(env,"temporary-unit-test",sender);
+  assert.equal(first.telegramAccepted,true);
+  const second=await runOneTimeTelegramTest(env,"temporary-unit-test",sender);
+  assert.equal(second.alreadyAttempted,true);
+  assert.equal(sends,1);
+});
+test("temporary Telegram smoke test refuses missing secrets",async()=>{
+  let sends=0;
+  const res=await runOneTimeTelegramTest({},"test",async()=>{sends++;return true;});
+  assert.equal(res.configured,false);
+  assert.equal(sends,0);
 });
