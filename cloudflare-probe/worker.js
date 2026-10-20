@@ -47,7 +47,7 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary")) {
       return new Response("Not found", {status:404});
     }
     const filename = path === "/check" ? "event.json" : "sessions.json";
@@ -65,6 +65,23 @@ export default {
       try {
         const parsed = JSON.parse(data);
         result.jsonParsed = true;
+        if (path === "/sessions-summary") {
+          const list = parsed && Array.isArray(parsed.sessions) ? parsed.sessions : [];
+          result.sessionCount = list.length;
+          result.sessions = list.map((session) => ({
+            sessionId: String(session.sessionId || "").slice(0,40),
+            date: String(session.date || "").slice(0,45),
+            time: String(session.time || "").slice(0,45),
+            hidden: session.hidden,
+            ticketArea: session.ticketArea,
+            exposeStart: session.exposeStart,
+            exposeEnd: session.exposeEnd,
+            possibleStatusKeys: Object.keys(session).filter(k => /status|sold|remain|stock|available|buy|sale|expose|ticket/i.test(k)),
+            validKnownId: Object.values(SESSION_IDS).includes(String(session.sessionId||""))
+          }));
+          result.allSixMatched = result.sessionCount === 6 && result.sessions.every(x=>x.validKnownId);
+          return reply(result);
+        }
         result.shape = summarizeShape(parsed);
         const serialized = JSON.stringify(parsed);
         result.sessionsMentioned = Object.fromEntries(Object.entries(SESSION_IDS).map(([label,id]) =>
