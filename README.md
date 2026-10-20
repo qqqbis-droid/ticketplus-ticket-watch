@@ -4,6 +4,21 @@
 
 這個儲存庫獨立於股票雷達，僅進行一般網頁讀取，不登入、不繞過驗證、不搶購或下單。
 
+## 2026-10-20 網頁讀取結論（最新：HTTP 403 原因已查明）
+
+在 GitHub 雲端以**單次正常、匿名唯讀請求**測試 Ticket Plus 活動頁實際使用的官方資料網址，伺服器回應：
+- HTTP **403 Forbidden**
+- Server: **CloudFront**
+- X-Cache: **Error from cloudfront**
+- 錯誤頁包含：**Request blocked**
+- 實際測試紀錄：https://github.com/qqqbis-droid/ticketplus-ticket-watch/actions/runs/39401237313
+
+這不是延長等待或修改網頁 CSS 選取器就能修好的故障，而是目前雲端請求確實被服務端拒絕。正常 Safari 能看見網頁、GitHub 雲端無法讀到六張場次卡，兩者結果不矛盾。
+
+**維持正式監測停用**，不使用代理、破解防護、偽造身分或冒用私人會員登入資料繞過拒絕存取。若未來網站提供合規的公開票況來源或授權讀取，再恢復實站驗證。
+
+Telegram iPhone 測試已於 2026-10-20 成功（https://github.com/qqqbis-droid/ticketplus-ticket-watch/actions/runs/39395549122）。目前還沒有可工作的自動監票，請勿依賴它接收釋票警報。
+
 ## 場次
 六個 2026 年日期：12/12、12/13、12/15、12/18、12/19、12/20，網址在 config/events.json。
 
