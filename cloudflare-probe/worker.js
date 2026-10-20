@@ -48,8 +48,112 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample" && path !== "/inventory-all-summary")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/inventory-all-summary") {
+      // Explicit one-off diagnostic endpoint; NOT used by the Cron scheduler.
+      // Reads public static schema and dynamic status in groups of <=60 IDs.
+      // Never buys, saves states, or sends Telegram.
+      try {
+        const getJson=async(url)=>{
+          const response=await fetch(url,{method:"GET",redirect:"manual"});
+          if(!response.ok) throw new Error("HTTP_"+response.status);
+          return await response.json();
+        };
+        const [pStatic,aStatic]=await Promise.all([
+          getJson(BASE+"products.json"),getJson(BASE+"ticketAreas.json")
+        ]);
+        if(!Array.isArray(pStatic?.products)||!Array.isArray(aStatic?.ticketAreas)) {
+          return reply({observation:"STATIC_SCHEMA_INVALID"});
+        }
+        const recognized=new Set(Object.values(SESSION_IDS));
+        const products=pStatic.products.filter(x=>
+          x && recognized.has(x.sessionId) && x.hidden!==true && typeof x.productId==="string");
+        const areas=pStatic.ticketAreas.filter(x=>
+          x && recognized.has(x.sessionId) && x.hidden!==true && typeof x.ticketAreaId==="string");
+        const batches=(items,size=60)=>Array.from({length:Math.ceil(items.length/size)},(_,i)=>
+          items.slice(i*size,(i+1)*size));
+        const uniqueProducts=[...new Set(products.map(p=>p.productId))];
+        const uniqueAreas=[...new Set(areas.map(a=>a.ticketAreaId))];
+        // Stay below Cloudflare free-tier external subrequest limits; fail closed.
+        if(uniqueProducts.length>600 || uniqueAreas.length>600) {
+          return reply({observation:"UNEXPECTED_ITEM_COUNT"});
+        }
+        async function getDynamic(key,ids,resultKey) {
+          const packs=batches(ids);
+          const results=[];
+          const codes=[];
+          for(let i=0;i<packs.length;i+=3) {
+            const current=packs.slice(i,i+3);
+            const replies=await Promise.all(current.map(pack=>
+              getJson("https://apis.ticketplus.com.tw/config/api/v1/get?"+
+                new URLSearchParams({[key]:pack.join(",")}))
+            ));
+            for(const value of replies) {
+              codes.push(value?.errCode??null);
+              if(!["0","00"].includes(String(value?.errCode)) ||
+                !Array.isArray(value?.result?.[resultKey])) {
+                throw new Error("DYNAMIC_API_ERROR");
+              }
+              results.push(...value.result[resultKey]);
+            }
+          }
+          const indexed=new Map();
+          for(const record of results) {
+            if(typeof record?.id!=="string" || indexed.has(record.id)) {
+              throw new Error("DUPLICATE_OR_INVALID_DYNAMIC_ID");
+            }
+            indexed.set(record.id,record);
+          }
+          if(ids.some(id=>!indexed.has(id)) || indexed.size!==ids.length) {
+            throw new Error("DYNAMIC_INCOMPLETE");
+          }
+          return {indexed,codes,totalRequests:packs.length};
+        }
+        const pDynamic=await getDynamic("productId",uniqueProducts,"product");
+        const aDynamic=await getDynamic("ticketAreaId",uniqueAreas,"ticketArea");
+        const normalizeStatus=x=>typeof x?.status==="string" ? x.status : "missing";
+        function summaryFor(list,field,mapping) {
+          const statuses={};
+          let countPositive=0,countZero=0,countNull=0;
+          const unusual=[];
+          for(const obj of list) {
+            const v=mapping.get(obj[field]),status=normalizeStatus(v);
+            statuses[status]=(statuses[status]||0)+1;
+            if(typeof v.count==="number") {
+              if(v.count>0) countPositive++;
+              else if(v.count===0) countZero++;
+            }else countNull++;
+            if(status!=="soldout" && unusual.length<5) {
+              unusual.push({id:obj[field],status,count:typeof v.count==="number"?v.count:null});
+            }
+          }
+          return {count:list.length,statuses,positiveCountEntries:countPositive,
+            zeroCountEntries:countZero,missingCountEntries:countNull,
+            nonSoldoutSamples:unusual};
+        }
+        const sessions=Object.entries(SESSION_IDS).map(([label,id])=>{
+          const ps=products.filter(x=>x.sessionId===id);
+          const as=areas.filter(x=>x.sessionId===id);
+          return {label,products:summaryFor(ps,"productId",pDynamic.indexed),
+            ticketAreas:summaryFor(as,"ticketAreaId",aDynamic.indexed)};
+        });
+        return reply({
+          source:"Ticket Plus official dynamic product/area status; full visible schema scan",
+          checkedAtTaipei:new Date().toLocaleString("sv-SE",{timeZone:"Asia/Taipei"}),
+          productsChecked:uniqueProducts.length,areasChecked:uniqueAreas.length,
+          officialRequests:2+pDynamic.totalRequests+aDynamic.totalRequests,
+          sessions,
+          note:"status and counts cannot on their own prove the UI says 暫無票券. No alerts, orders, or state changes."
+        });
+      }catch(e) {
+        const reason=String(e?.message||"");
+        return reply({observation:"FULL_STOCK_DIAGNOSTIC_FAILED",
+          errorCode:/^(HTTP_\d+|DYNAMIC_API_ERROR|DUPLICATE_OR_INVALID_DYNAMIC_ID|DYNAMIC_INCOMPLETE)$/.test(reason)?
+            reason:"UNEXPECTED_RESPONSE",
+          note:"Do not infer available stock from incomplete data."});
+      }
     }
     if (path === "/inventory-sample") {
       // Read-only feasibility probe. Two sample products and up to two matched
