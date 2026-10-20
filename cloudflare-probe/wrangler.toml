@@ -2,5 +2,12 @@ name = "ticketplus-check"
 main = "worker.js"
 compatibility_date = "2026-10-20"
 workers_dev = true
+keep_vars = true
 
-# No cron triggers, secrets, or paid bindings. Manual one-shot HTTP test only.
+# Workers KV is included in Free and can be auto-provisioned by Wrangler.
+# Only sale-state transitions and hourly heartbeats are written.
+[[kv_namespaces]]
+binding = "TICKET_STATE"
+
+# No cron triggers until the user has privately configured Telegram
+# secrets and we have verified /monitor-preview.
