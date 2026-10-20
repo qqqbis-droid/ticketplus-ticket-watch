@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {SESSIONS,decide,readOfficialStatus,makeTelegramText,dryRunStatus} from '../monitor.js';
 
 const sold=()=>Object.fromEntries(SESSIONS.map(s=>[s.id,"soldout"]));
-function fakeReply(rows,errCode="0") {
+function fakeReply(rows,errCode="00") {
   return async()=>({
     ok:true,status:200,
     headers:{get:()=>"application/json; charset=utf-8"},
@@ -114,4 +114,19 @@ test("an HTTP 200 API response without session list cannot produce an alert",asy
     assert.equal(err.safeDiagnostic.hasSessionArray,false);
     return true;
   });
+});
+
+test("real-world API errCode 00 is accepted with all six soldout",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  assert.deepEqual(await readOfficialStatus(fakeReply(rows,"00")),sold());
+});
+test("legacy API errCode 0 remains accepted",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  assert.deepEqual(await readOfficialStatus(fakeReply(rows,"0")),sold());
+});
+test("other codes cannot be mistaken for success",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  for(const code of ["01","000","4010",null]){
+    await assert.rejects(readOfficialStatus(fakeReply(rows,code)),/application error/);
+  }
 });
