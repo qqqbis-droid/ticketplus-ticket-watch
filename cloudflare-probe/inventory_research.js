@@ -264,7 +264,7 @@ export async function runZoneResearch(env,{now=new Date(),readSnapshot=readZoneS
   const heartbeat=!Number.isFinite(lastSaved) || now.getTime()-lastSaved>=HEARTBEAT_MS;
   const changed=!previous?.snapshot || changedCount>0;
   // Evidence must be durably saved BEFORE any Telegram push.
-  if(previous?.snapshot && changedCount>0) {
+  if((previous?.snapshot && changedCount>0) || alerts.length>0) {
     const prior=await env.TICKET_STATE.get(RESEARCH_EVIDENCE_KEY,{type:"json"});
     const list=Array.isArray(prior?.records)?prior.records:[];
     list.unshift(evidence);
