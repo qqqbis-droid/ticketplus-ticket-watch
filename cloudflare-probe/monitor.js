@@ -27,7 +27,18 @@ export async function readOfficialStatus(fetchFn=fetch) {
   }
   const json=await resp.json();
   if(String(json?.errCode)!=="0" || !Array.isArray(json?.result?.session)) {
-    throw new Error("Official API returned application error");
+    // The official endpoint sometimes returns an application-level error under
+    // HTTP 200. Expose only its numeric/string code and response shape, never
+    // any session body, private data, cookies, credentials or full errMsg.
+    const error=new Error("Official API returned application error");
+    error.safeDiagnostic={
+      upstreamErrorCode:json?.errCode==null ? null : String(json.errCode).slice(0,32),
+      hasSessionArray:Array.isArray(json?.result?.session),
+      sessionCount:Array.isArray(json?.result?.session) ? json.result.session.length : null,
+      rootKeys:json && typeof json==="object" ? Object.keys(json).slice(0,12) : [],
+      resultKeys:json?.result && typeof json.result==="object" ? Object.keys(json.result).slice(0,12) : []
+    };
+    throw error;
   }
   const rows=json.result.session;
   if(rows.length!==SESSIONS.length) throw new Error("Incomplete official session list");
