@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SESSIONS,decide,readOfficialStatus,makeTelegramText} from '../monitor.js';
+import {SESSIONS,decide,readOfficialStatus,makeTelegramText,dryRunStatus} from '../monitor.js';
 
 const sold=()=>Object.fromEntries(SESSIONS.map(s=>[s.id,"soldout"]));
 function fakeReply(rows,errCode="0") {
@@ -64,4 +64,34 @@ test("telegram message includes correct direct order URL",()=>{
   assert.match(msg,/12\/19/);
   assert.match(msg,/d042e17d71c0dc8bb3e43f08ecbc50b6/);
   assert.match(msg,/onsale/);
+});
+
+test("official API success is reported despite a failed KV read",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  const env={TICKET_STATE:{get:async()=>{throw Error("test KV read failure");}}};
+  const result=await dryRunStatus(env,fakeReply(rows));
+  assert.equal(result.apiReadSuccess,true);
+  assert.equal(result.stateStorageConfigured,true);
+  assert.equal(result.stateStorageReadable,false);
+  assert.equal(result.storageError,"KV_READ_FAILED");
+  assert.equal(result.readyForSchedule,false);
+  assert.equal(result.sessions.length,6);
+});
+test("missing KV never disguises valid six-session status",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  const result=await dryRunStatus({},fakeReply(rows));
+  assert.equal(result.apiReadSuccess,true);
+  assert.equal(result.storageError,"KV_BINDING_MISSING");
+  assert.equal(result.stateStorageConfigured,false);
+});
+test("all prerequisite flags alone do not bypass missing KV read",async()=>{
+  const rows=SESSIONS.map(x=>({id:x.id,status:"soldout"}));
+  const env={
+    MONITOR_ENABLED:"true",TELEGRAM_BOT_TOKEN:"TEST_ONLY",
+    TELEGRAM_CHAT_ID:"TEST_ONLY",TICKET_STATE:{get:async()=>null}
+  };
+  const result=await dryRunStatus(env,fakeReply(rows));
+  assert.equal(result.apiReadSuccess,true);
+  assert.equal(result.stateStorageReadable,true);
+  assert.equal(result.readyForSchedule,true);
 });
