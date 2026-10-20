@@ -154,10 +154,12 @@ export async function dryRunStatus(env, fetchFn=fetch) {
   let old={};
   let storageReadable=false;
   let storageError=null;
+  let lastStoredCheck=null;
   if(env.TICKET_STATE) {
     try {
       const stored=await env.TICKET_STATE.get(STORE_KEY,{type:"json"});
       old=stored && stored.version===1 && stored.sessions ? stored.sessions : {};
+      lastStoredCheck=stored?.version===1 && typeof stored.checkedAt==="string" ? stored.checkedAt : null;
       storageReadable=true;
     } catch (e) {
       storageError="KV_READ_FAILED";
@@ -173,6 +175,7 @@ export async function dryRunStatus(env, fetchFn=fetch) {
     stateStorageConfigured:!!env.TICKET_STATE,
     stateStorageReadable:storageReadable,
     storageError,
+    lastSavedMonitorCheck:lastStoredCheck,
     telegramConfigured:Boolean(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
     enabled:env.MONITOR_ENABLED==="true",
     readyForSchedule:storageReadable &&
@@ -184,32 +187,4 @@ export async function dryRunStatus(env, fetchFn=fetch) {
     })),
     note:"This is a read-only preview. No alerts were sent, and no KV state was changed."
   };
-}
-
-
-/** Temporary one-time manual delivery test; no sale-state alerts or cron.
- *  KV is marked BEFORE contacting Telegram so re-opening the URL cannot flood
- *  the chat. The test route is removed once confirmed.
- */
-export async function runOneTimeTelegramTest(env, testId, sendFn=sendTelegram) {
-  if(!env.TICKET_STATE || !env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
-    return {configured:false,telegramAccepted:false,reason:"MISSING_BINDING_OR_SECRET"};
-  }
-  const key="ticketplus:telegram-test:v1:"+testId;
-  if(await env.TICKET_STATE.get(key)) {
-    return {configured:true,alreadyAttempted:true,telegramAccepted:null};
-  }
-  // One attempt maximum. If delivery fails, diagnose and issue a fresh test ID.
-  await env.TICKET_STATE.put(key,"attempted");
-  const message=[
-    "✅ Ticket Plus 雲端測試通知",
-    "傳送來源：Cloudflare Worker（不是 GitHub）",
-    "六場票況監測：程式已準備，排程尚未開啟",
-    "這是測試訊息，不是釋票通知。"
-  ].join("\n");
-  let accepted=false;
-  try {accepted=await sendFn(env,message);}
-  catch(e) {return {configured:true,attempted:true,telegramAccepted:false,reason:"SEND_ERROR"};}
-  return {configured:true,attempted:true,telegramAccepted:accepted,
-    note:"This confirms Telegram API acceptance only; check actual iPhone notification."};
 }
