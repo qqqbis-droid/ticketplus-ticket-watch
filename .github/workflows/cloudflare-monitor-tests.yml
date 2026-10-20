@@ -17,4 +17,4 @@ jobs:
         with:
           node-version: '22'
       - name: Validate six sale-states and Telegram deduplication offline
-        run: node --test cloudflare-probe/tests/monitor.test.js
+        run: node --test cloudflare-probe/tests/*.test.js
