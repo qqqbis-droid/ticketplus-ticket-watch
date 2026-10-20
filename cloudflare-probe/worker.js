@@ -1,4 +1,5 @@
 import {runScheduledMonitor, dryRunStatus} from "./monitor.js";
+import {verifyWebhookRequest,handleTelegramUpdate,registerButtonUI,getButtonUIStatus} from "./telegram_ui.js";
 // Cloudflare-only Ticket Plus official sale-state reader; no login or purchases.
 const EVENT = "af2bd66d8fe65d78963cbb5bdc85771c";
 const BASE = "https://apis.ticketplus.com.tw/config/api/v1/getS3?path=event/" + EVENT + "/";
@@ -43,12 +44,29 @@ function summarizeShape(value) {
     arrays, possibleFields};
 }
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    if (path === "/telegram-webhook") {
+      if(!await verifyWebhookRequest(request,env)) return new Response("Not allowed",{status:403});
+      const size=Number(request.headers.get("content-length")||0);
+      if(size>64_000) return new Response("Too large",{status:413});
+      try {
+        const raw=await request.text();
+        if(raw.length>64_000) return new Response("Too large",{status:413});
+        const update=JSON.parse(raw);
+        if(!update || typeof update!=="object") return new Response("Bad request",{status:400});
+        ctx.waitUntil(handleTelegramUpdate(env,update).catch(e=>{
+          console.warn("Telegram webhook process failed",e?.name||"Error");
+        }));
+        return new Response("OK",{status:200});
+      } catch(e) {
+        return new Response("Bad request",{status:400});
+      }
+    }
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample" && path !== "/inventory-all-summary")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema" && path !== "/inventory-sample" && path !== "/inventory-all-summary" && path !== "/bot-ui-status")) {
       return new Response("Not found", {status:404});
     }
     if (path === "/inventory-all-summary") {
@@ -279,6 +297,10 @@ export default {
         return reply({observation:"SCHEMA_READ_FAILED",errorType:e?.name||"Error"});
       }
     }
+    if (path === "/bot-ui-status") {
+      try { return reply(await getButtonUIStatus(env)); }
+      catch(e){ return reply({buttonSetupReady:false,reason:"STATUS_READ_FAILED"}); }
+    }
     if (path === "/monitor-preview") {
       try { return reply(await dryRunStatus(env)); }
       catch(e) {
@@ -463,6 +485,11 @@ export default {
     }
   },
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(runScheduledMonitor(env));
+    // Button setup is independent from the existing six-session Cron monitor.
+    // Errors in Telegram webhook registration cannot suppress ticket monitoring.
+    ctx.waitUntil(Promise.allSettled([
+      runScheduledMonitor(env),
+      registerButtonUI(env)
+    ]));
   }
 };
