@@ -53,7 +53,25 @@ export default {
     }
     if (path === "/monitor-preview") {
       try { return reply(await dryRunStatus(env)); }
-      catch(e) {return reply({apiReadSuccess:false,observation:"UNKNOWN",errorType:e?.name||"Error",message:"Unable to validate official six-session statuses"});}
+      catch(e) {
+        const message=String(e?.message||"");
+        const safeReason=message.startsWith("Official API inaccessible")
+          ? "API_HTTP_OR_CONTENT_TYPE"
+          : message==="Official API returned application error"
+            ? "API_APPLICATION_ERROR"
+            : message==="Incomplete official session list"
+              ? "API_SESSION_COUNT"
+              : message==="Missing or duplicate official session identifier"
+                ? "API_SESSION_ID"
+                : message==="Unexpected or missing official status"
+                  ? "API_UNEXPECTED_STATUS"
+                  : "UNEXPECTED_READ_ERROR";
+        return reply({
+          apiReadSuccess:false, observation:"UNKNOWN", failedStage:"official_status_read",
+          errorCode:safeReason, errorType:e?.name||"Error",
+          note:"No schedule/Telegram alerts were run. Compare /all-status and review read-only API response."
+        });
+      }
     }
     if (path === "/all-status") {
       // The six public session URLs correspond to these non-secret backend IDs,
