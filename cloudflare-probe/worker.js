@@ -1,5 +1,5 @@
-import {runScheduledMonitor, dryRunStatus, runOneTimeTelegramTest} from "./monitor.js";
-// Ticket Plus read-only Cloudflare diagnostics. NO cron, login, purchases or retries.
+import {runScheduledMonitor, dryRunStatus} from "./monitor.js";
+// Cloudflare-only Ticket Plus official sale-state reader; no login or purchases.
 const EVENT = "af2bd66d8fe65d78963cbb5bdc85771c";
 const BASE = "https://apis.ticketplus.com.tw/config/api/v1/getS3?path=event/" + EVENT + "/";
 const SESSION_IDS = {
@@ -48,16 +48,8 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/telegram-test-3de9b57c885d9107cede9b3985fc4dda426f")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview")) {
       return new Response("Not found", {status:404});
-    }
-    if (path === "/telegram-test-3de9b57c885d9107cede9b3985fc4dda426f") {
-      // This temporary path works only once and expires soon. No public bot tokens.
-      if(Date.now()>Date.parse("2026-10-21T00:00:00+08:00")) {
-        return new Response("Test window expired", {status:410});
-      }
-      try {return reply(await runOneTimeTelegramTest(env,"3de9b57c885d9107cede9b3985fc4dda426f"));}
-      catch(e) {return reply({configured:false,telegramAccepted:false,errorCode:"TEST_SETUP_FAILED"});}
     }
     if (path === "/monitor-preview") {
       try { return reply(await dryRunStatus(env)); }
