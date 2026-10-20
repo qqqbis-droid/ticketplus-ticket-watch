@@ -26,7 +26,7 @@ export async function readOfficialStatus(fetchFn=fetch) {
     throw new Error("Official API inaccessible or invalid response: "+resp.status);
   }
   const json=await resp.json();
-  if(String(json?.errCode)!=="0" || !Array.isArray(json?.result?.session)) {
+  if(!["0","00"].includes(String(json?.errCode)) || !Array.isArray(json?.result?.session)) {
     // The official endpoint sometimes returns an application-level error under
     // HTTP 200. Expose only its numeric/string code and response shape, never
     // any session body, private data, cookies, credentials or full errMsg.
