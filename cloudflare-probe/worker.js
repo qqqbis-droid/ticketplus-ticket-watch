@@ -47,8 +47,47 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/status-probe") {
+      // Read-only, one session. The IDs are public event/session identifiers
+      // used by the site; no login information or credentials.
+      const apiUrl = "https://apis.ticketplus.com.tw/config/api/v1/get"
+        + "?eventId=e000001534&sessionId=s000002288";
+      try {
+        const res = await fetch(apiUrl, {method:"GET", redirect:"manual"});
+        const report = {source:"Ticket Plus status API", date:"2026-12-12",
+          httpStatus:res.status, success:res.ok,
+          contentType:res.headers.get("content-type")};
+        if (!res.ok) {
+          report.observation = res.status === 403 ? "REQUEST_BLOCKED" : "OTHER_RESPONSE";
+          return reply(report);
+        }
+        const body = await res.text();
+        if (body.length > 500_000) return reply({...report,observation:"TOO_LARGE_TO_INSPECT"});
+        try {
+          const data = JSON.parse(body);
+          const list = data && data.result && data.result.session;
+          report.jsonParsed = true;
+          report.topLevelKeys = data && typeof data === "object" ? Object.keys(data).slice(0,12) : [];
+          report.resultKeys = data?.result && typeof data.result === "object" ? Object.keys(data.result).slice(0,15) : [];
+          report.sessionCount = Array.isArray(list) ? list.length : 0;
+          report.sessions = Array.isArray(list) ? list.slice(0,3).map(x=>({
+            keys:x && typeof x === "object" ? Object.keys(x).slice(0,30) : [],
+            status:x?.status,
+            id:x?.sessionId || x?.id || null,
+            hasTicketCounts: x && typeof x === "object"
+              ? Object.keys(x).some(k=>/remain|stock|available|quantity|quota/i.test(k)) : false
+          })) : [];
+          report.note = "Status alone is not proof of actual available tickets; verify against official UI.";
+        } catch {
+          report.jsonParsed = false;
+        }
+        return reply(report);
+      } catch (e) {
+        return reply({source:"Ticket Plus status API",observation:"REQUEST_FAILED",errorType:e?.name||"UnknownError"});
+      }
     }
     const filename = (path === "/check" || path === "/event-fields") ? "event.json" : "sessions.json";
     try {
