@@ -55,18 +55,23 @@ export default {
       // Explicit one-off diagnostic endpoint; NOT used by the Cron scheduler.
       // Reads public static schema and dynamic status in groups of <=60 IDs.
       // Never buys, saves states, or sends Telegram.
+      let diagnosticStage="INITIAL";
+      let completedRequests=0;
       try {
         const getJson=async(url)=>{
           const response=await fetch(url,{method:"GET",redirect:"manual"});
+          completedRequests++;
           if(!response.ok) throw new Error("HTTP_"+response.status);
           return await response.json();
         };
+        diagnosticStage="STATIC_FETCH";
         const [pStatic,aStatic]=await Promise.all([
           getJson(BASE+"products.json"),getJson(BASE+"ticketAreas.json")
         ]);
         if(!Array.isArray(pStatic?.products)||!Array.isArray(aStatic?.ticketAreas)) {
           return reply({observation:"STATIC_SCHEMA_INVALID"});
         }
+        diagnosticStage="STATIC_PARSE";
         const recognized=new Set(Object.values(SESSION_IDS));
         const products=pStatic.products.filter(x=>
           x && recognized.has(x.sessionId) && x.hidden!==true && typeof x.productId==="string");
@@ -85,6 +90,7 @@ export default {
           const results=[];
           const codes=[];
           for(let i=0;i<packs.length;i+=3) {
+            diagnosticStage=(key==="productId"?"PRODUCT_BATCH_":"AREA_BATCH_")+Math.floor(i/3);
             const current=packs.slice(i,i+3);
             const replies=await Promise.all(current.map(pack=>
               getJson("https://apis.ticketplus.com.tw/config/api/v1/get?"+
@@ -99,6 +105,7 @@ export default {
               results.push(...value.result[resultKey]);
             }
           }
+          diagnosticStage=(key==="productId"?"PRODUCT_INDEX":"AREA_INDEX");
           const indexed=new Map();
           for(const record of results) {
             if(typeof record?.id!=="string" || indexed.has(record.id)) {
@@ -111,7 +118,9 @@ export default {
           }
           return {indexed,codes,totalRequests:packs.length};
         }
+        diagnosticStage="PRODUCTS_BEGIN";
         const pDynamic=await getDynamic("productId",uniqueProducts,"product");
+        diagnosticStage="AREAS_BEGIN";
         const aDynamic=await getDynamic("ticketAreaId",uniqueAreas,"ticketArea");
         const normalizeStatus=x=>typeof x?.status==="string" ? x.status : "missing";
         function summaryFor(list,field,mapping) {
@@ -121,7 +130,7 @@ export default {
           for(const obj of list) {
             const v=mapping.get(obj[field]),status=normalizeStatus(v);
             statuses[status]=(statuses[status]||0)+1;
-            if(typeof v.count==="number") {
+            if(typeof v?.count==="number") {
               if(v.count>0) countPositive++;
               else if(v.count===0) countZero++;
             }else countNull++;
@@ -133,12 +142,14 @@ export default {
             zeroCountEntries:countZero,missingCountEntries:countNull,
             nonSoldoutSamples:unusual};
         }
+        diagnosticStage="BUILD_SUMMARY";
         const sessions=Object.entries(SESSION_IDS).map(([label,id])=>{
           const ps=products.filter(x=>x.sessionId===id);
           const as=areas.filter(x=>x.sessionId===id);
           return {label,products:summaryFor(ps,"productId",pDynamic.indexed),
             ticketAreas:summaryFor(as,"ticketAreaId",aDynamic.indexed)};
         });
+        diagnosticStage="SEND_SUMMARY";
         return reply({
           source:"Ticket Plus official dynamic product/area status; full visible schema scan",
           checkedAtTaipei:new Date().toLocaleString("sv-SE",{timeZone:"Asia/Taipei"}),
@@ -149,10 +160,14 @@ export default {
         });
       }catch(e) {
         const reason=String(e?.message||"");
+        const safeName=["TypeError","SyntaxError","RangeError","Error"].includes(e?.name)?e.name:"OTHER_ERROR";
         return reply({observation:"FULL_STOCK_DIAGNOSTIC_FAILED",
+          failedStage:diagnosticStage,
+          completedRequests,
+          errorType:safeName,
           errorCode:/^(HTTP_\d+|DYNAMIC_API_ERROR|DUPLICATE_OR_INVALID_DYNAMIC_ID|DYNAMIC_INCOMPLETE)$/.test(reason)?
             reason:"UNEXPECTED_RESPONSE",
-          note:"Do not infer available stock from incomplete data."});
+          note:"Diagnostic only. No ticket state, KV state, Telegram settings or cron triggers were changed."});
       }
     }
     if (path === "/inventory-sample") {
