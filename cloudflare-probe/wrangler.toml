@@ -8,6 +8,7 @@ keep_vars = true
 # remain set privately in Cloudflare Dashboard.
 [vars]
 MONITOR_ENABLED = "true"
+RESEARCH_ENABLED = "true"
 
 # Previous states and notification deduplication: Cloudflare free Workers KV.
 [[kv_namespaces]]
@@ -15,5 +16,6 @@ binding = "TICKET_STATE"
 
 # Every minute, entirely within Cloudflare (not GitHub Actions).
 # KV heartbeat stays on its four-minute safety margin to respect Free limits.
+# Research runs separately every 5 minutes, with stored checkpoints every 15 minutes.
 [triggers]
 crons = ["* * * * *"]
