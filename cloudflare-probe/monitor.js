@@ -107,6 +107,12 @@ async function sendTelegram(env, text) {
   try {return (await res.json()).ok === true;}catch{return false;}
 }
 
+
+export function shouldSaveHeartbeat(lastCheck, now) {
+  const previous=Date.parse(lastCheck||"");
+  return !Number.isFinite(previous) || now.getTime()-previous>=4*60*1000;
+}
+
 export async function runScheduledMonitor(env) {
   // Explicit activation gate prevents accidental alerts before final verification.
   if(env.MONITOR_ENABLED!=="true" || !env.TICKET_STATE || !env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) {
@@ -135,11 +141,13 @@ export async function runScheduledMonitor(env) {
       }
     } catch (e) {console.warn("Telegram failed for session",alert.session.id,e?.name || "Error");}
   }
-  // KV write only on transitions/notification ACK or once per hour for heartbeat.
+  // KV write on transitions/Telegram delivery, plus once per scheduled 5-min
+  // interval when a read succeeded. A 4-minute minimum prevents duplicates
+  // from consuming free KV writes if a scheduled event runs unusually soon.
   const previousString=JSON.stringify(old || {});
   const change=JSON.stringify(next)!==previousString;
   const lastCheck=stored?.checkedAt || "";
-  const heartbeat=(now.getTime()-new Date(lastCheck).getTime())>=3600000 || !lastCheck;
+  const heartbeat=shouldSaveHeartbeat(lastCheck,now);
   if(change || heartbeat) {
     await env.TICKET_STATE.put(STORE_KEY,JSON.stringify({version:1,sessions:next,checkedAt:now.toISOString()}));
   }
