@@ -4,10 +4,15 @@ compatibility_date = "2026-10-20"
 workers_dev = true
 keep_vars = true
 
-# Workers KV is included in Free and can be auto-provisioned by Wrangler.
-# Only sale-state transitions and hourly heartbeats are written.
+# The only non-secret activation flag; encrypted Telegram credentials
+# remain set privately in Cloudflare Dashboard.
+[vars]
+MONITOR_ENABLED = "true"
+
+# Previous states and notification deduplication: Cloudflare free Workers KV.
 [[kv_namespaces]]
 binding = "TICKET_STATE"
 
-# No cron triggers until the user has privately configured Telegram
-# secrets and we have verified /monitor-preview.
+# Every five minutes, entirely within Cloudflare (not GitHub Actions).
+[triggers]
+crons = ["*/5 * * * *"]
