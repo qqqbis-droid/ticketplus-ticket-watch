@@ -48,8 +48,41 @@ export default {
     if (path === "/") return new Response("Ready. /check tests event.json; /sessions-check tests sessions.json.", {
       headers: {"content-type":"text/plain; charset=utf-8", "cache-control":"no-store"}
     });
-    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview")) {
+    if (request.method !== "GET" || (path !== "/check" && path !== "/sessions-check" && path !== "/sessions-summary" && path !== "/event-fields" && path !== "/status-probe" && path !== "/all-status" && path !== "/monitor-preview" && path !== "/stock-schema")) {
       return new Response("Not found", {status:404});
+    }
+    if (path === "/stock-schema") {
+      // Read-only feasibility probe for session vs. ticket area/product signals.
+      // Nothing here triggers Telegram, KV writes, purchases, or a schedule.
+      try {
+        const result = {};
+        for (const file of ["products", "ticketAreas"]) {
+          const response = await fetch(BASE + file + ".json", {method:"GET",redirect:"manual"});
+          result[file+"Http"]=response.status;
+          if (!response.ok) return reply({...result,observation:"SOURCE_NOT_ACCESSIBLE"});
+          const json=await response.json();
+          const list=json && Array.isArray(json[file])?json[file]:null;
+          result[file+"RootKeys"]=json && typeof json==="object"?Object.keys(json).slice(0,8):[];
+          result[file+"Count"]=list?.length ?? null;
+          result[file+"SampleKeys"]=list?.length?Object.keys(list[0]).slice(0,30):[];
+          if (!list) return reply({...result,observation:"UNEXPECTED_SOURCE_SCHEMA"});
+          result[file+"IdsHaveSession"]=list.some(item=>item && Object.values(SESSION_IDS).includes(item.sessionId));
+          result[file+"CountsBySession"]=Object.fromEntries(
+            Object.entries(SESSION_IDS).map(([label,sessionId])=>
+              [label,list.filter(item=>item?.sessionId===sessionId).length]
+            )
+          );
+          // Confirm field names before trying inventory-aware alerts.
+          result[file+"StatusFields"]=list.length?
+            Object.keys(list[0]).filter(key=>/status|count|limit|stock|sale|sold/i.test(key)):[];
+          result[file+"SampleId"]=file==="products"?
+            String(list[0]?.productId||"").slice(0,25):String(list[0]?.ticketAreaId||"").slice(0,25);
+        }
+        result.note="Schema discovery only; zero ticket availability conclusions. No notifications sent.";
+        return reply(result);
+      } catch(e) {
+        return reply({observation:"SCHEMA_READ_FAILED",errorType:e?.name||"Error"});
+      }
     }
     if (path === "/monitor-preview") {
       try { return reply(await dryRunStatus(env)); }
