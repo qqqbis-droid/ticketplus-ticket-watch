@@ -1,3 +1,4 @@
+// Trigger first Cloudflare Git-connected build on repository push.
 // One-time read-only source check. Never logs in, retries, buys, or schedules.
 const TARGET = "https://apis.ticketplus.com.tw/config/api/v1/getS3?path=event/af2bd66d8fe65d78963cbb5bdc85771c/event.json";
 
